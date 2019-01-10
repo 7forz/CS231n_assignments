@@ -1,6 +1,5 @@
 import numpy as np
 from random import shuffle
-from past.builtins import xrange
 
 def softmax_loss_naive(W, X, y, reg):
   """
@@ -30,7 +29,29 @@ def softmax_loss_naive(W, X, y, reg):
   # here, it is easy to run into numeric instability. Don't forget the        #
   # regularization!                                                           #
   #############################################################################
-  pass
+  num_train = X.shape[0]
+  num_classes = W.shape[1]
+  scores_matrix = X.dot(W)  # (N, C)
+
+  for i in range(num_train):  # one row is one sample's scores
+    scores = scores_matrix[i]
+    scores -= np.max(scores)  # shift to prevent big exponent
+
+    correct_label = y[i]
+    loss += -scores[correct_label] + np.log(np.sum(np.exp(scores)))  # simplified ln(e^x)=x
+    
+    for j in range(num_classes):
+      softmax_output = np.exp(scores[j]) / np.sum(np.exp(scores))
+      if j == y[i]:
+        dW[:, j] += (-1 + softmax_output) * X[i] 
+      else: 
+        dW[:, j] += softmax_output * X[i] 
+
+  loss /= num_train
+  dW /= num_train
+
+  loss += reg * np.sum(W * W)
+  dW += 2 * reg * W
   #############################################################################
   #                          END OF YOUR CODE                                 #
   #############################################################################
@@ -54,7 +75,25 @@ def softmax_loss_vectorized(W, X, y, reg):
   # here, it is easy to run into numeric instability. Don't forget the        #
   # regularization!                                                           #
   #############################################################################
-  pass
+  num_train = X.shape[0]
+  num_classes = W.shape[1]
+
+  scores = X.dot(W)  # (N, C)
+  scores -= (np.max(scores, axis=1)).reshape(-1, 1)  # shift to prevent big exponent
+
+  softmax_outputs = np.exp(scores) / (np.sum(np.exp(scores), axis=1)).reshape(-1,1)
+
+  loss = -np.sum(np.log(softmax_outputs[range(num_train), y]))
+
+  dS = softmax_outputs.copy()
+  dS[range(num_train), y] -= 1
+  dW = (X.T).dot(dS)
+
+  loss /= num_train
+  dW /= num_train
+
+  loss += reg * np.sum(W * W)
+  dW += 2 * reg * W
   #############################################################################
   #                          END OF YOUR CODE                                 #
   #############################################################################
