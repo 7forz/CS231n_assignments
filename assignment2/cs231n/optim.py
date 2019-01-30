@@ -37,7 +37,8 @@ def sgd(w, dw, config=None):
     config format:
     - learning_rate: Scalar learning rate.
     """
-    if config is None: config = {}
+    if config is None:
+        config = {}
     config.setdefault('learning_rate', 1e-2)
 
     w -= config['learning_rate'] * dw
@@ -55,7 +56,8 @@ def sgd_momentum(w, dw, config=None):
     - velocity: A numpy array of the same shape as w and dw used to store a
       moving average of the gradients.
     """
-    if config is None: config = {}
+    if config is None:
+        config = {}
     config.setdefault('learning_rate', 1e-2)
     config.setdefault('momentum', 0.9)
     v = config.get('velocity', np.zeros_like(w))
@@ -65,7 +67,9 @@ def sgd_momentum(w, dw, config=None):
     # TODO: Implement the momentum update formula. Store the updated value in #
     # the next_w variable. You should also use and update the velocity v.     #
     ###########################################################################
-    pass
+    v = config['momentum'] * v - config['learning_rate'] * dw  # integrate velocity
+    w += v  # integrate position
+    next_w = w
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -99,7 +103,10 @@ def rmsprop(x, dx, config=None):
     # in the next_x variable. Don't forget to update cache value stored in    #
     # config['cache'].                                                        #
     ###########################################################################
-    pass
+    config['cache'] = config['decay_rate'] * config['cache'] + \
+                      (1 - config['decay_rate']) * dx**2
+    x += -config['learning_rate'] * dx / (np.sqrt(config['cache']) + config['epsilon'])
+    next_x = x
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -136,7 +143,13 @@ def adam(x, dx, config=None):
     # the next_x variable. Don't forget to update the m, v, and t variables   #
     # stored in config.                                                       #
     ###########################################################################
-    pass
+    config['t'] += 1  # WHY THIS LINE +=1 ????  ref: https://github.com/lightaime/cs231n/blob/master/assignment2/cs231n/optim.py
+    config['m'] = config['beta1'] * config['m'] + (1 - config['beta1']) * dx
+    _mt = config['m'] / (1 - config['beta1']**config['t'])
+    config['v'] = config['beta2'] * config['v'] + (1 - config['beta2']) * (dx**2)
+    _vt = config['v'] / (1 - config['beta2']**config['t'])
+    x += - config['learning_rate'] * _mt / (np.sqrt(_vt) + config['epsilon'])
+    next_x = x
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
