@@ -182,6 +182,11 @@ class FullyConnectedNet(object):
             self.params['b%d' % i] = np.zeros(dims[i])
             self.params['W%d' % i] = weight_scale * \
                                      np.random.randn(dims[i-1], dims[i])
+            
+        if self.use_batchnorm:  # DONT'T FORGET MORE PARAMS FOR BETA GAMMA!!!!
+            for i in range(len(hidden_dims)):
+                self.params['gamma%d' % (i+1)] = np.ones(hidden_dims[i])
+                self.params['beta%d' % (i+1)] = np.zeros(hidden_dims[i])
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
@@ -247,7 +252,13 @@ class FullyConnectedNet(object):
         # hidden layers
         for i in range(self.num_layers-1):
             index = i + 1
-            _out, _cache = affine_relu_forward(outs[index-1],
+            if self.use_batchnorm:
+                _out, _cache = affine_bn_relu_forward(outs[index-1],
+                            self.params['W%d' % index], self.params['b%d' % index],
+                            self.params['gamma%d' % index], self.params['beta%d' % index],
+                            self.bn_params[i])  # 用上一级的out作输入 
+            else:
+                _out, _cache = affine_relu_forward(outs[index-1],
                             self.params['W%d' % index], self.params['b%d' % index])  # 用上一级的out作输入 
             outs[index] = _out
             caches[index] = _cache
@@ -291,7 +302,11 @@ class FullyConnectedNet(object):
         
         # hidden layers
         for i in range(self.num_layers-1, 0, -1):
-            d_list[i], grads['W%d' % i], grads['b%d' % i] = affine_relu_backward(d_list[i+1], caches[i])
+            if self.use_batchnorm:
+                d_list[i], grads['W%d' % i], grads['b%d' % i], grads['gamma%d' % i], grads['beta%d' % i] = \
+                        affine_bn_relu_backward(d_list[i+1], caches[i])
+            else:
+                d_list[i], grads['W%d' % i], grads['b%d' % i] = affine_relu_backward(d_list[i+1], caches[i])
             grads['W%d' % i] += self.reg * np.sum(self.params['W%d' % i])
         ############################################################################
         #                             END OF YOUR CODE                             #
