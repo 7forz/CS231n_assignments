@@ -247,6 +247,7 @@ class FullyConnectedNet(object):
         ######## {affine - [batch norm] - relu - [dropout]} x (L - 1) - affine - softmax  ########
         outs = [None] * (self.num_layers+1)  # +1 for initial X
         caches = [None] * (self.num_layers+1)
+        dropout_caches = [None] * (self.num_layers+1)
         outs[0] = X
         
         # hidden layers
@@ -262,8 +263,7 @@ class FullyConnectedNet(object):
                             self.params['W%d' % index], self.params['b%d' % index])  # 用上一级的out作输入 
             
             if self.use_dropout:
-                _out, _cache_dropout = dropout_forward(_out, self.dropout_param)
-                _cache = (*_cache, *_cache_dropout)  # 加在后面
+                _out, dropout_caches[index] = dropout_forward(_out, self.dropout_param)
             
             outs[index] = _out
             caches[index] = _cache
@@ -308,9 +308,7 @@ class FullyConnectedNet(object):
         # hidden layers
         for i in range(self.num_layers-1, 0, -1):
             if self.use_dropout:
-                d_list[i+1] = dropout_backward(d_list[i+1], caches[i][-2:])  # 只使用cache最后2个值
-                caches[i] = caches[i][:-2]  # 使用后去掉那2个值
-                d_list[i], grads['W%d' % i], grads['b%d' % i] = affine_relu_backward(d_list[i+1], caches[i])
+                d_list[i+1] = dropout_backward(d_list[i+1], dropout_caches[i])  # 只使用cache最后2个值
             if self.use_batchnorm:
                 d_list[i], grads['W%d' % i], grads['b%d' % i], grads['gamma%d' % i], grads['beta%d' % i] = \
                         affine_bn_relu_backward(d_list[i+1], caches[i])
