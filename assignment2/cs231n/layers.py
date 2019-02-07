@@ -409,7 +409,28 @@ def conv_forward_naive(x, w, b, conv_param):
     # TODO: Implement the convolutional forward pass.                         #
     # Hint: you can use the function np.pad for padding.                      #
     ###########################################################################
-    pass
+    # init
+    N, C, H, W = x.shape
+    F, C, HH, WW = w.shape  # the 2 C are same
+    stride = conv_param['stride']
+    pad = conv_param['pad']
+
+    H_new = int(1 + (H + 2 * pad - HH) / stride)
+    W_new = int(1 + (W + 2 * pad - WW) / stride)
+    out = np.zeros((N, F, H_new, W_new))
+    
+    for _n in range(N):  # the nth image
+        img_padded = np.pad(x[_n], ((0,0), (pad,pad), (pad,pad)), 'constant', constant_values=0)
+        for _f in range(F):  # the fth conv core(filter)
+            conv_core_flatten = w[_f].flatten()  # flat the filter to do inner product
+            for _h in range(H_new):
+                for _w in range(W_new):
+                    img_part = img_padded[:,  # all channels
+                                          _h*stride : _h*stride+HH,  # height
+                                          _w*stride : _w*stride+WW  # width
+                                         ]
+                    img_part_flatten = img_part.flatten()
+                    out[_n, _f, _h, _w] = np.dot(conv_core_flatten, img_part_flatten) + b[_f]
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -434,7 +455,31 @@ def conv_backward_naive(dout, cache):
     ###########################################################################
     # TODO: Implement the convolutional backward pass.                        #
     ###########################################################################
-    pass
+    x, w, b, conv_param = cache
+    N, C, H, W = x.shape
+    F, C, HH, WW = w.shape  # the 2 C are same
+    stride = conv_param['stride']
+    pad = conv_param['pad']
+    H_new = int(1 + (H + 2 * pad - HH) / stride)
+    W_new = int(1 + (W + 2 * pad - WW) / stride)
+
+    dx = np.zeros_like(x)
+    x_pad = np.pad(x, ((0,), (0,), (pad,), (pad,)), mode='constant', constant_values=0)
+    dx_pad = np.zeros_like(x_pad)
+    dw = np.zeros_like(w)
+    
+    db = np.sum(dout, axis=(0,2,3))  # dimension analysis, trivial
+
+    # ref: https://github.com/lightaime/cs231n/blob/master/assignment2/cs231n/layers.py
+    for i in range(H_new):
+        for j in range(W_new):
+            x_pad_masked = x_pad[:, :, i*stride:i*stride+HH, j*stride:j*stride+WW]
+            for k in range(F):  # compute dw
+                dw[k ,: ,: ,:] += np.sum(x_pad_masked * (dout[:, k, i, j])[:, None, None, None], axis=0)
+            for n in range(N):  # compute dx_pad
+                dx_pad[n, :, i*stride:i*stride+HH, j*stride:j*stride+WW] += np.sum((w[:, :, :, :] * 
+                                                 (dout[n, :, i, j])[:,None ,None, None]), axis=0)
+    dx = dx_pad[:,:,pad:-pad,pad:-pad]
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -460,7 +505,30 @@ def max_pool_forward_naive(x, pool_param):
     ###########################################################################
     # TODO: Implement the max pooling forward pass                            #
     ###########################################################################
-    pass
+    N, C, H, W = x.shape
+    pool_height = pool_param['pool_height']
+    pool_width = pool_param['pool_width']
+    stride = pool_param['stride']
+    H_new = int(1 + (H - pool_height) / stride)
+    W_new = int(1 + (W - pool_width) / stride)
+    
+    out = np.zeros((N, C, H_new, W_new))
+#     for _n in range(N):  # the nth image
+#         for _c in range(C):
+#             img = x[_n][_c]  # img.shape is 2 dimensions
+#             for _h in range(H_new):
+#                 for _w in range(W_new):
+#                     img_part = img[_h*stride: _h*stride+pool_height,
+#                                    _w*stride: _w*stride+pool_width]
+#                     out[_n, _c, _h, _w] = np.max(img_part)
+    # higher efficiency
+    for _h in range(H_new):
+        for _w in range(W_new):
+            img_mask = x[:,  # all images
+                         :,  # all channels
+                         _h*stride: _h*stride+pool_height,
+                         _w*stride: _w*stride+pool_width]
+            out[:, :, _h, _w] = np.max(img_mask, axis=(2,3))
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -483,7 +551,28 @@ def max_pool_backward_naive(dout, cache):
     ###########################################################################
     # TODO: Implement the max pooling backward pass                           #
     ###########################################################################
-    pass
+    x, pool_param = cache
+    N, C, H, W = x.shape
+    pool_height = pool_param['pool_height']
+    pool_width = pool_param['pool_width']
+    stride = pool_param['stride']
+    H_new = int(1 + (H - pool_height) / stride)
+    W_new = int(1 + (W - pool_width) / stride)
+    dx = np.zeros_like(x)
+
+    for _h in range(H_new):
+        for _w in range(W_new):
+            img_mask = x[:,  # all images
+                         :,  # all channels
+                         _h*stride: _h*stride+pool_height,
+                         _w*stride: _w*stride+pool_width]  # shape=(N,C,pool_height,pool_width)
+            max_x_masked = np.max(img_mask, axis=(2,3))  # shape=(N,C)
+            max_x_masked = max_x_masked[:, :, None, None]  # 添加2个维度 使维度对齐 shape=(N,C,1,1)
+
+            is_max = (max_x_masked == img_mask)  # shape=(N,C,pool_height,pool_width)
+            # 在原尺寸的dx上分块填入is_max中为True的位置的dout对应值
+            dx[:, :, _h*stride: _h*stride+pool_height, 
+               _w*stride: _w*stride+pool_width] += (dout[:, :, _h, _w])[:, :, None, None] * is_max
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -521,7 +610,12 @@ def spatial_batchnorm_forward(x, gamma, beta, bn_param):
     # version of batch normalization defined above. Your implementation should#
     # be very short; ours is less than five lines.                            #
     ###########################################################################
-    pass
+    N, C, H, W = x.shape
+    # doesn't work..
+    # out, cache = batchnorm_forward(x.reshape(-1, C), gamma, beta, bn_param)
+    # out = out.reshape(N, C, H, W)
+    temp_out, cache = batchnorm_forward(x.transpose(0,3,2,1).reshape(-1, C), gamma, beta, bn_param)
+    out = temp_out.reshape(N,W,H,C).transpose(0,3,2,1)
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -551,7 +645,10 @@ def spatial_batchnorm_backward(dout, cache):
     # version of batch normalization defined above. Your implementation should#
     # be very short; ours is less than five lines.                            #
     ###########################################################################
-    pass
+    N, C, H, W = dout.shape
+    dout_t = dout.transpose(0,3,2,1).reshape(-1, C)
+    dx_t, dgamma, dbeta = batchnorm_backward_alt(dout_t, cache)
+    dx = dx_t.reshape(N, W, H, C).transpose(0,3,2,1)
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
