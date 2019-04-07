@@ -34,7 +34,10 @@ def rnn_step_forward(x, prev_h, Wx, Wh, b):
     # hidden state and any values you need for the backward pass in the next_h   #
     # and cache variables respectively.                                          #
     ##############################################################################
-    pass
+    # tanh( b + W * prev_h + U * x )
+    z = prev_h.dot(Wh) + x.dot(Wx) + b
+    next_h = np.tanh(z)  # shape (N, H)
+    cache = (prev_h, Wh, x, Wx, next_h)
     ##############################################################################
     #                               END OF YOUR CODE                             #
     ##############################################################################
@@ -46,7 +49,7 @@ def rnn_step_backward(dnext_h, cache):
     Backward pass for a single timestep of a vanilla RNN.
 
     Inputs:
-    - dnext_h: Gradient of loss with respect to next hidden state
+    - dnext_h: Gradient of loss with respect to next hidden state, shape (N, H)
     - cache: Cache object from the forward pass
 
     Returns a tuple of:
@@ -63,7 +66,20 @@ def rnn_step_backward(dnext_h, cache):
     # HINT: For the tanh function, you can compute the local derivative in terms #
     # of the output value from tanh.                                             #
     ##############################################################################
-    pass
+    # dnext_h = dtanh(z) = 1-(tanh)^2(z)
+    # z = prev_h.dot(Wh) + x.dot(Wx) + b
+    prev_h, Wh, x, Wx, next_h = cache
+    
+    # gradient = local * upstream
+    dz = (1 - next_h**2) * dnext_h  # shape (N, H)
+    
+    db = np.sum(dz, axis=0)
+    
+    dx = dz.dot(Wx.T)  # (N,H)*(H,D)=(N, D)
+    dWx = (x.T).dot(dz)  # (D,N)*(N,H)=(D, H)
+    
+    dprev_h = dz.dot(Wh.T)   # (N, H)*(H,H)=(N, H)
+    dWh = (prev_h.T).dot(dz)  # (H,N)*(N,H)=(H, H)
     ##############################################################################
     #                               END OF YOUR CODE                             #
     ##############################################################################
@@ -94,7 +110,21 @@ def rnn_forward(x, h0, Wx, Wh, b):
     # input data. You should use the rnn_step_forward function that you defined  #
     # above. You can use a for loop to help compute the forward pass.            #
     ##############################################################################
-    pass
+    N, T, D = x.shape
+    _, H = h0.shape
+    h = np.zeros((N, T, H))
+    
+    # t=0, initial, input x of t=0, and h0
+    h[:, 0, :], _ = rnn_step_forward(x[:, 0, :], h0, Wx, Wh, b)
+    
+    # for other t, input previous h, and new x
+    for t in range(1, T):
+        h[:, t, :], _ = rnn_step_forward(x[:, t, :], h[:, t-1, :], Wx, Wh, b)
+    
+    # function rnn_step_backward needs prev_h, Wh, x, Wx, next_h,
+    # among which prev_h, next_h are included in h,
+    # Wh, x, Wx are needed, too
+    cache = (x, h0, Wh, Wx, b, h)
     ##############################################################################
     #                               END OF YOUR CODE                             #
     ##############################################################################
@@ -121,7 +151,31 @@ def rnn_backward(dh, cache):
     # sequence of data. You should use the rnn_step_backward function that you   #
     # defined above. You can use a for loop to help compute the backward pass.   #
     ##############################################################################
-    pass
+    x, h0, Wh, Wx, b, h = cache  # x shape (N, T, D)
+    _, H = h0.shape
+    N, T, D = x.shape
+    
+    dx = np.zeros((N, T, D))
+    dWx = np.zeros((D, H))
+    dWh = np.zeros((H, H))
+    db = np.zeros(H)
+    dprev_h = np.zeros((N, H))
+    
+    for t in range(T-1, -1, -1):   # [T-1, T-2, ..., 0]
+        # def rnn_step_backward(dnext_h, cache=(prev_h, Wh, x, Wx, next_h))
+        #     return dx, dprev_h, dWx, dWh, db
+        if t>0:
+            prev_h = h[:, t-1, :]
+        else:
+            prev_h = h0
+        
+        dnext_h = dh[:, t, :] + dprev_h  # WHY ?????????????????????????????????
+        dx[:, t, :], dprev_h, _dWx, _dWh, _db = rnn_step_backward(dnext_h,
+                                            (prev_h, Wh, x[:, t, :], Wx, h[:, t, :]))  # input the cache
+        dWx += _dWx
+        dWh += _dWh
+        db += _db
+    dh0 = dprev_h
     ##############################################################################
     #                               END OF YOUR CODE                             #
     ##############################################################################
@@ -149,7 +203,16 @@ def word_embedding_forward(x, W):
     #                                                                            #
     # HINT: This can be done in one line using NumPy's array indexing.           #
     ##############################################################################
-    pass
+    # WHAT DOES THIS MEAN?
+    # source: https://github.com/lightaime/cs231n/blob/master/assignment3/cs231n/rnn_layers.py
+    N, T = x.shape
+    V, D = W.shape
+    out = np.zeros((N, T, D))
+  
+    for i in range(N):
+        for j in range(T):
+            out[i, j] = W[x[i,j]]
+    cache = (x, V, D)
     ##############################################################################
     #                               END OF YOUR CODE                             #
     ##############################################################################
@@ -178,7 +241,11 @@ def word_embedding_backward(dout, cache):
     # Note that Words can appear more than once in a sequence.                   #
     # HINT: Look up the function np.add.at                                       #
     ##############################################################################
-    pass
+    # WHY ??????
+    x, V, D = cache  # x shape (N, T)
+    dW = np.zeros((V, D))
+    
+    np.add.at(dW, x, dout)
     ##############################################################################
     #                               END OF YOUR CODE                             #
     ##############################################################################
